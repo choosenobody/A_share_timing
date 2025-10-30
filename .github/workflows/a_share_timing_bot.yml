@@ -1,0 +1,67 @@
+name: A-share Timing Bot
+
+on:
+  schedule:
+    # 每个工作日北京时间21:00  (13:00 UTC)
+    - cron: "0 13 * * 1-5"
+    # 每10分钟轮询一次，响应 /status 指令
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "run/status/poll"
+        required: false
+        default: "status"
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+
+      - name: Decide mode (scheduled or poll)
+        id: decide
+        run: |
+          # 若是 schedule: 13:00 UTC 周一到周五 → 发送总结；其余 schedule → 轮询响应/status
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            # 取当前UTC小时和分钟
+            H=$(date -u +%H)
+            M=$(date -u +%M)
+            DOW=$(date -u +%u)  # 1..7
+            if [ "$H" = "13" ] && [ "$M" = "00" ] && [ $DOW -ge 1 ] && [ $DOW -le 5 ]; then
+              echo "mode=run" >> $GITHUB_OUTPUT
+            else
+              echo "mode=poll" >> $GITHUB_OUTPUT
+            fi
+          else
+            # workflow_dispatch 传参
+            echo "mode=${{ inputs.mode }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID:   ${{ secrets.CHAT_ID }}
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          TE_API_KEY: ${{ secrets.TE_API_KEY }}
+        run: |
+          MODE="${{ steps.decide.outputs.mode }}"
+          echo "Mode: $MODE"
+          if [ "$MODE" = "run" ]; then
+            python bot.py run
+          elif [ "$MODE" = "status" ]; then
+            python bot.py status
+          else
+            # 轮询9分钟，捕捉 /status
+            python bot.py poll 9
+          fi
