@@ -2,16 +2,18 @@ name: A-share Timing Bot
 
 on:
   schedule:
-    # 每个工作日 北京时间21:00（UTC 13:00）
-    - cron: "0 13 * * 1-5"
-    # 每10分钟轮询一次，捕捉 /status
-    - cron: "*/10 * * * *"
+    - cron: "0 13 * * 1-5"     # 工作日 21:00 (UTC+8)
+    - cron: "*/10 * * * *"     # 轮询 /status
   workflow_dispatch:
     inputs:
       mode:
         description: "run/status/poll"
         required: false
         default: "status"
+      debug:
+        description: "Set DEBUG=1 for verbose logs"
+        required: false
+        default: "0"
 
 jobs:
   run-bot:
@@ -26,16 +28,13 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Decide mode (scheduled or poll)
         id: decide
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            H=$(date -u +%H)
-            M=$(date -u +%M)
-            DOW=$(date -u +%u)  # 1..7
+            H=$(date -u +%H); M=$(date -u +%M); DOW=$(date -u +%u)
             if [ "$H" = "13" ] && [ "$M" = "00" ] && [ $DOW -ge 1 ] && [ $DOW -le 5 ]; then
               echo "mode=run" >> $GITHUB_OUTPUT
             else
@@ -51,12 +50,12 @@ jobs:
           CHAT_ID:   ${{ secrets.CHAT_ID }}
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           TE_API_KEY: ${{ secrets.TE_API_KEY }}
+          DEBUG: ${{ inputs.debug }}
         run: |
-          MODE="${{ steps.decide.outputs.mode }}"
-          echo "Mode: $MODE"
-          if [ "$MODE" = "run" ]; then
+          echo "Mode: ${{ steps.decide.outputs.mode }}, DEBUG=${DEBUG}"
+          if [ "${{ steps.decide.outputs.mode }}" = "run" ]; then
             python bot.py run
-          elif [ "$MODE" = "status" ]; then
+          elif [ "${{ steps.decide.outputs.mode }}" = "status" ]; then
             python bot.py status
           else
             python bot.py poll 9
