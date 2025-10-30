@@ -2,9 +2,9 @@ name: A-share Timing Bot
 
 on:
   schedule:
-    # 每个工作日北京时间21:00  (13:00 UTC)
+    # 每个工作日 北京时间21:00（UTC 13:00）
     - cron: "0 13 * * 1-5"
-    # 每10分钟轮询一次，响应 /status 指令
+    # 每10分钟轮询一次，捕捉 /status
     - cron: "*/10 * * * *"
   workflow_dispatch:
     inputs:
@@ -32,9 +32,7 @@ jobs:
       - name: Decide mode (scheduled or poll)
         id: decide
         run: |
-          # 若是 schedule: 13:00 UTC 周一到周五 → 发送总结；其余 schedule → 轮询响应/status
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            # 取当前UTC小时和分钟
             H=$(date -u +%H)
             M=$(date -u +%M)
             DOW=$(date -u +%u)  # 1..7
@@ -44,7 +42,6 @@ jobs:
               echo "mode=poll" >> $GITHUB_OUTPUT
             fi
           else
-            # workflow_dispatch 传参
             echo "mode=${{ inputs.mode }}" >> $GITHUB_OUTPUT
           fi
 
@@ -62,6 +59,5 @@ jobs:
           elif [ "$MODE" = "status" ]; then
             python bot.py status
           else
-            # 轮询9分钟，捕捉 /status
             python bot.py poll 9
           fi
